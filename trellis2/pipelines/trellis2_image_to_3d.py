@@ -126,7 +126,7 @@ class Trellis2ImageTo3DPipeline(Pipeline):
             if not np.all(alpha == 255):
                 has_alpha = True
         max_size = max(input.size)
-        scale = min(1, 1024 / max_size)
+        scale = min(1, 2048 / max_size)
         if scale < 1:
             input = input.resize((int(input.width * scale), int(input.height * scale)), Image.Resampling.LANCZOS)
         if has_alpha:
@@ -491,6 +491,7 @@ class Trellis2ImageTo3DPipeline(Pipeline):
         return_latent: bool = False,
         pipeline_type: Optional[str] = None,
         max_num_tokens: int = 49152,
+        cond_resolution: int = 1024,
     ) -> List[MeshWithVoxel]:
         """
         Run the pipeline.
@@ -506,6 +507,11 @@ class Trellis2ImageTo3DPipeline(Pipeline):
             return_latent (bool): Whether to return the latent codes.
             pipeline_type (str): The type of the pipeline. Options: '512', '1024', '1024_cascade', '1536_cascade'.
             max_num_tokens (int): The maximum number of tokens to use.
+            cond_resolution (int): Resolution the input image is resized to for the DINOv3
+                conditioning of the shape/texture SLat models (the sparse structure stage
+                always uses 512). The default 1024 matches training; higher values (e.g.
+                1536) feed more image detail to the models at the cost of more conditioning
+                tokens, which the flow models were not trained against — experimental.
         """
         # Check pipeline type
         pipeline_type = pipeline_type or self.default_pipeline_type
@@ -530,7 +536,7 @@ class Trellis2ImageTo3DPipeline(Pipeline):
             image = self.preprocess_image(image)
         torch.manual_seed(seed)
         cond_512 = self.get_cond([image], 512)
-        cond_1024 = self.get_cond([image], 1024) if pipeline_type != '512' else None
+        cond_1024 = self.get_cond([image], cond_resolution) if pipeline_type != '512' else None
         ss_res = {'512': 32, '1024': 64, '1024_cascade': 32, '1536_cascade': 32}[pipeline_type]
         coords = self.sample_sparse_structure(
             cond_512, ss_res,
